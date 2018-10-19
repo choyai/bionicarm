@@ -1,21 +1,14 @@
 import serial
 import numpy as np
 import time
+import datetime as dt
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
 BAUDRATE = int(input("Enter baud rate: "))
 PORT = input("Enter COM port: ")
-max_data = 2000
 
-
-def count2angle(count):
-    """
-    :param count:  pulsecount from encoder
-    :return: motor armature angle
-    """
-    angle = count * np.pi * 2 / 768
-    return angle
-
-
+# initiate coms with device
 ser = serial.Serial()
 ser.baudrate = BAUDRATE
 ser.port = PORT
@@ -29,47 +22,59 @@ while True:
         start = time.time()
         break
     except:
-        print("No permission to access " + PORT)
+        print("cannot access " + PORT)
+
+        # Parameters
+x_len = 200         # Number of points to display
+y_range = [0, 1023]  # Range of possible Y values to display
+
+# Create figure for plotting
+fig = plt.figure()
+ax = fig.add_subplot(1, 1, 1)
+xs = list(range(0, 200))
+ys = [0] * x_len
+ax.set_ylim(y_range)
+
+# Create a blank line. We will update the line in animate
+line, = ax.plot(xs, ys)
+
+# Add labels
+plt.title('ADC reading')
+plt.xlabel('Samples')
+plt.ylabel('ADC')
+
+# This function is called periodically from FuncAnimation
+
+adc_reading = 0
 
 
-counter = 1
-data = ""
-while True:
-    try:
-        line = ser.readline().decode('utf-8')
-        print(line)
-    # parse data and do conversions
-        if len(line) > 0:
-            time_in_millisecs = int(line.split(",")[0])
-            # get time in seconds
-            time_in_seconds = time_in_millisecs / 1000.0
-            # get angle in radians
-            count = int(line.split(",")[1])
-            angle = count2angle(count)
-            # get voltage
-            millivoltage = int(line.split(",")[2])
-            voltage = millivoltage / 1000.0
-            print(str(time_in_seconds) + "s" + " " + str(angle) +
-                  " radians" + " " + str(voltage) + " V")
+def animate(i, ys):
 
-            # create new string entry with all the values separated by commas
-            new = "{0:.5f}".format(time_in_seconds) + \
-                ",{0:.5f},".format(voltage) + "{0:.5f}".format(angle)
-            # Save to CSV file and exit after 20s or 2000 entries
-            if counter >= max_data or time_in_seconds >= 10:
-                f = open("log_file2.csv", "w")
-                f.write(data)
-                f.close()
-                data = ''
-                print("File saved")
-                end = time.time()
-                print(end - start)
-                break
-            data += (str(new) + "\n")
-            counter += 1
-        else:
-            pass
-    except:
-        print("whoops, parsing error")
+    # Read adc
+    message = ser.readline().decode('utf-8')
+    print(message)
 
+    if message is not '':
+        #
+        adc_reading = int(message.split(",")[0])
+    #
+    # Add y to list
+    ys.append(adc_reading)
+
+    # Limit y list to set number of items
+    ys = ys[-x_len:]
+
+    # Update line with new Y values
+    line.set_ydata(ys)
+
+    return line,
+
+
+# Set up plot to call animate() function periodically
+ani = animation.FuncAnimation(fig,
+                              animate,
+                              fargs=(ys,),
+                              interval=50,
+                              blit=True)
+plt.show()
 ser.close()
